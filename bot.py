@@ -24,30 +24,18 @@ bot = commands.Bot(command_prefix='!', intents=intents, help_command=None)
 
 # Find system FFmpeg
 def find_ffmpeg():
-    """Find the system FFmpeg executable"""
-    # Try common system paths
-    possible_paths = [
-        '/usr/bin/ffmpeg',
-        '/usr/local/bin/ffmpeg',
-        '/opt/homebrew/bin/ffmpeg',  # macOS with Homebrew
-        'ffmpeg'  # Use system PATH
-    ]
-    
-    for path in possible_paths:
-        if path == 'ffmpeg':
-            # Check if ffmpeg is in system PATH
-            if shutil.which('ffmpeg'):
-                print(f"Found FFmpeg in system PATH: {shutil.which('ffmpeg')}")
-                return 'ffmpeg'
-        else:
-            if os.path.isfile(path) and os.access(path, os.X_OK):
-                print(f"Found FFmpeg at: {path}")
-                return path
-    
-    # If not found, return None
-    print("WARNING: FFmpeg not found in common locations!")
-    print("Please ensure FFmpeg is installed on your Raspberry Pi:")
-    print("sudo apt update && sudo apt install ffmpeg")
+    """Resolve the FFmpeg executable, preferring PATH."""
+    resolved = shutil.which('ffmpeg')
+    if resolved:
+        print(f"Found FFmpeg in PATH: {resolved}")
+        return resolved
+
+    for path in ('/usr/bin/ffmpeg', '/usr/local/bin/ffmpeg', '/opt/homebrew/bin/ffmpeg'):
+        if os.path.isfile(path) and os.access(path, os.X_OK):
+            print(f"Found FFmpeg at: {path}")
+            return path
+
+    print("WARNING: FFmpeg not confirmed at startup. Playback will be tested when audio is requested.")
     return None
 
 # Set FFmpeg executable
@@ -77,15 +65,10 @@ ffmpeg_options = {
     'options': '-vn -filter:a "volume=0.5"'
 }
 
-# Set FFmpeg executable for discord.py if found
 if FFMPEG_EXECUTABLE:
-    discord.FFmpegPCMAudio.FFMPEG_EXECUTABLE = FFMPEG_EXECUTABLE
-    discord.FFmpegOpusAudio.FFMPEG_EXECUTABLE = FFMPEG_EXECUTABLE
-    print(f"Discord.py configured to use FFmpeg at: {FFMPEG_EXECUTABLE}")
+    print(f"FFmpeg will be passed explicitly to audio sources: {FFMPEG_EXECUTABLE}")
 else:
-    print("ERROR: FFmpeg not found! Music playback will not work.")
-    print("Install FFmpeg on your Raspberry Pi with:")
-    print("sudo apt update && sudo apt install ffmpeg")
+    print("FFmpeg not confirmed at startup — will fall back to 'ffmpeg' on first playback attempt.")
 
 ytdl = youtube_dl.YoutubeDL(ytdl_format_options)
 
@@ -137,19 +120,14 @@ class YTDLSource(discord.PCMVolumeTransformer):
         
         print(f"Playing: {data.get('title')} - URL: {filename}")
         
-        # Check if FFmpeg is available before creating audio source
-        if not FFMPEG_EXECUTABLE:
-            raise Exception("FFmpeg not found! Please install FFmpeg on your system.")
-        
-        # Create the audio source with system FFmpeg
+        executable = FFMPEG_EXECUTABLE or 'ffmpeg'
         try:
-            audio_source = discord.FFmpegPCMAudio(filename, **ffmpeg_options)
+            audio_source = discord.FFmpegPCMAudio(filename, executable=executable, **ffmpeg_options)
             return cls(audio_source, data=data)
         except Exception as e:
-            print(f"Error creating FFmpeg audio source: {e}")
-            # Try without additional options as fallback
+            print(f"Error creating FFmpeg audio source with '{executable}': {e}")
             try:
-                audio_source = discord.FFmpegPCMAudio(filename)
+                audio_source = discord.FFmpegPCMAudio(filename, executable=executable)
                 return cls(audio_source, data=data)
             except Exception as e2:
                 print(f"Fallback audio creation also failed: {e2}")
@@ -380,21 +358,6 @@ async def update_bot_status():
     except Exception as e:
         print(f"Error updating bot status: {e}")
 
-# Helper function to update bot status
-async def update_bot_status():
-    """Update bot status based on maintenance mode"""
-    try:
-        if maintenance_mode:
-            activity = discord.Activity(type=discord.ActivityType.watching, name="Under Maintenance")
-            status = discord.Status.do_not_disturb
-        else:
-            activity = discord.Game(name="Music Bot | !help for commands")
-            status = discord.Status.online
-        
-        await bot.change_presence(activity=activity, status=status)
-    except Exception as e:
-        print(f"Error updating bot status: {e}")
-
 # Helper function to check maintenance mode
 async def check_maintenance():
     """Check if maintenance mode should be disabled"""
@@ -534,8 +497,7 @@ async def on_ready():
         except Exception as e:
             print(f"⚠️ FFmpeg test error: {e}")
     else:
-        print("❌ FFmpeg not found! Music playback will not work.")
-        print("Install with: sudo apt update && sudo apt install ffmpeg")
+        print("⚠️ FFmpeg not confirmed at startup. Playback will be tested when audio is requested.")
     
     # Add persistent views for role selection
     bot.add_view(RoleSelectionView())

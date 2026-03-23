@@ -57,6 +57,7 @@ ytdl_format_options = {
     'extractaudio': True,
     'audioformat': 'mp3',
     'audioquality': '192K',
+    'cookiefile': 'cookies.txt'
 }
 
 # Updated FFmpeg options with better error handling

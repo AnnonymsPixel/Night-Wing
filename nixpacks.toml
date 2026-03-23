@@ -9,3 +9,19 @@ RUN pip install -r requirements.txt
 COPY . .
 
 CMD ["python", "bot.py"]
+```
+
+**Then in Railway:**
+1. Go to your service → **Settings**
+2. Find **Builder** → change it to **Dockerfile**
+3. Make sure the Dockerfile path is set to `Dockerfile`
+4. Redeploy
+
+---
+
+If you don't have a `requirements.txt` yet, create one in your project root:
+```
+discord.py
+yt-dlp
+python-dotenv
+PyNaCl
